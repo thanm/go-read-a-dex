@@ -10,10 +10,11 @@ package apkread
 
 import (
 	"archive/zip"
-	. "dexapkvisit"
-	"dexread"
 	"log"
 	"regexp"
+
+	. "github.com/thanm/go-read-a-dex/dexapkvisit"
+	"github.com/thanm/go-read-a-dex/dexread"
 )
 
 func ReadAPK(apk string, visitor DexApkVisitor) {

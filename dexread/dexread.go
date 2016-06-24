@@ -16,11 +16,12 @@ package dexread
 import (
 	"archive/zip"
 	"bytes"
-	. "dexapkvisit"
 	"encoding/binary"
 	"io"
 	"log"
 	"strings"
+
+	. "github.com/thanm/go-read-a-dex/dexapkvisit"
 )
 
 type DexState struct {
@@ -309,11 +310,9 @@ func unpackModUTFString(state *DexState, off uint32) string {
 	sdata := content[off:]
 	helper := ulebHelper{sdata}
 
-	// we ignore utf16_size
-	_ = helper.grabULEB128()
-
-	// unpack actual string
-	return string(helper.data[:zLen(sdata)])
+	// unpack len and then string
+	sl := helper.grabULEB128()
+	return string(helper.data[:sl])
 }
 
 func unpackMethodIds(state *DexState) []DexMethodIdItem {

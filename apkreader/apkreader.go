@@ -9,18 +9,17 @@ package main
 //
 
 import (
-	"apkdump"
-	"apkread"
-	"emitelf"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/thanm/go-read-a-dex/apkdump"
+	"github.com/thanm/go-read-a-dex/apkread"
 )
 
 var verbflag = flag.Int("v", 0, "Verbose trace output level")
 var dumpflag = flag.Bool("dump", false, "Dump DEX/APK info to stdout")
-var emitelfflag = flag.Bool("emitelf", false, "Emit virtual ELF (unimplemented)")
 
 func verb(vlevel int, s string, a ...interface{}) {
 	if *verbflag >= vlevel {
@@ -46,16 +45,13 @@ func main() {
 	if flag.NArg() != 1 {
 		usage("please supply an input APK file")
 	}
-	if !*dumpflag && !*emitelfflag {
-		usage("select one of -dump or -emitelf")
+	if !*dumpflag {
+		usage("select one of: -dump")
 	}
 	verb(1, "APK is %s", flag.Arg(0))
 
 	if *dumpflag {
 		apkread.ReadAPK(flag.Arg(0), &apkdump.DexApkDumper{Vlevel: *verbflag})
-	} else if *emitelfflag {
-		// NB: guts of emitted not implemented yet
-		apkread.ReadAPK(flag.Arg(0), &emitelf.ApkElfEmitter{Vlevel: *verbflag})
 	}
 	verb(1, "leaving main")
 }

@@ -17,7 +17,6 @@ func (d *DexApkDumper) VisitAPK(apk string) {
 }
 
 func (d *DexApkDumper) VisitDEX(dexname string, sha1signature [20]byte) {
-
 	fmt.Printf(" DEX %s sha1 %x\n", dexname, sha1signature)
 }
 
