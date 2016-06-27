@@ -21,7 +21,7 @@ import (
 	"log"
 	"strings"
 
-	. "github.com/thanm/go-read-a-dex/dexapkvisit"
+	"github.com/thanm/go-read-a-dex/dexapkvisit"
 )
 
 type DexState struct {
@@ -33,7 +33,7 @@ type DexState struct {
 	typeids    []uint32
 	strings    []string
 	fileheader DexFileHeader
-	visitor    DexApkVisitor
+	visitor    dexapkvisit.DexApkVisitor
 }
 
 //
@@ -44,7 +44,7 @@ type DexState struct {
 //   files and not just APK files?
 //
 
-func ReadDEX(apk string, dexname string, zf *zip.File, visitor DexApkVisitor) {
+func ReadDEX(apk string, dexname string, zf *zip.File, visitor dexapkvisit.DexApkVisitor) {
 	state := DexState{apk: apk, dexname: dexname, visitor: visitor}
 
 	// Open the DEX
@@ -115,8 +115,11 @@ func unpackDexFileHeader(state *DexState) DexFileHeader {
 	return retval
 }
 
+// Can't use io.SeekStart with gccgo (libgo not up to date)
+const ioSeekStart = 0
+
 func seekReader(state *DexState, off uint32) {
-	_, err := state.rdr.Seek(int64(off), io.SeekStart)
+	_, err := state.rdr.Seek(int64(off), ioSeekStart)
 	if err != nil {
 		log.Fatalf("reading apk %s dex %s: unable "+
 			"to seek to offset %d", state.apk, state.dexname, off)

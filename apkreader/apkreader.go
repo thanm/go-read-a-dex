@@ -1,7 +1,7 @@
 package main
 
 //
-// Rudimentary package for examining Android APK files. An APK file
+// Rudimentary program for examining Android APK files. An APK file
 // is basically a ZIP file that contains an Android manifest and a series
 // of DEX files, strings, resources, bitmaps, and assorted other items.
 // This specific reader looks only at the DEX files, not the other
