@@ -40,6 +40,7 @@ func TestSmallApkRead(t *testing.T) {
 
 	visitor := &captureDexApkVisitOperations{}
 	ReadAPK("testdata/fibonacci.apk", visitor)
+	actual := strings.Join(visitor.result, "\n")
 
 	expected := `APK testdata/fibonacci.apk
 		  DEX classes.dex sha1 fd56aced78355c305a9503d6f3dfe1f7ff6ac440
@@ -50,13 +51,6 @@ func TestSmallApkRead(t *testing.T) {
 		    method id 3 name 'rcnm1' code offset 1008
 		    method id 4 name 'rcnm2' code offset 1040
 		    method id 5 name 'rfibonacci' code offset 1072`
-
-	fmt.Printf("expected is: %s\n", squeezeWhite(expected))
-
-	actual := strings.Join(visitor.result, "\n")
-
-	fmt.Printf("actual is: %s\n", actual)
-	fmt.Printf("sq(actual) is: %s\n", squeezeWhite(actual))
 
 	if squeezeWhite(actual) != squeezeWhite(expected) {
 		t.Errorf("TestSmallApkRead: got '%s' expected '%s'",
