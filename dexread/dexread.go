@@ -59,8 +59,7 @@ func ReadDEXFile(dexFilePath string, visitor dexapkvisit.DexApkVisitor) error {
 		return mkError(&state, "os.Open() failed(): %v", err)
 	}
 	defer dfile.Close()
-	ReadDEX(nil, dexFilePath, dfile, uint64(fi.Size()), visitor)
-	return err
+	return ReadDEX(nil, dexFilePath, dfile, uint64(fi.Size()), visitor)
 }
 
 // Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
@@ -262,7 +261,6 @@ func examineClass(state *dexState, ci *DexClassHeader) {
 	numMethods := clh.numDirectMethods + clh.numVirtualMethods
 
 	// invoke visitor callback
-	fmt.Printf("ci is %v\n", *ci)
 	state.visitor.VisitClass(getClassName(state, ci), numMethods)
 
 	state.visitor.Verbose(1, "num static fields is %d", clh.numStaticFields)
@@ -386,9 +384,9 @@ func unpackTypeIds(state *dexState) (retval []uint32, err error) {
 
 	// read in the array of type id items
 	nTypeIds := int(state.fileHeader.TypeIdsSize)
-	ret := make([]uint32, nTypeIds, nTypeIds)
+	retval = make([]uint32, nTypeIds, nTypeIds)
 	for i := 0; i < nTypeIds; i++ {
-		err := binary.Read(state.rdr, binary.LittleEndian, &ret[i])
+		err := binary.Read(state.rdr, binary.LittleEndian, &retval[i])
 		if err != nil {
 			return retval, mkError(state, "type ID %d unpack failed: %v", i, err)
 		}
