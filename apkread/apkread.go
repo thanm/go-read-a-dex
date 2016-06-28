@@ -36,7 +36,13 @@ func ReadAPK(apk string, visitor DexApkVisitor) {
 		entryName := z.File[i].Name
 		if isDex.MatchString(entryName) {
 			visitor.Verbose(1, "dex file %s at entry %d", entryName, i)
-			dexread.ReadDEX(apk, entryName, z.File[i], visitor)
+			reader, err := z.File[i].Open()
+			if err != nil {
+				log.Fatalf("opening apk %s dex %s: %v", apk, entryName, err)
+			}
+			dexread.ReadDEX(&apk, entryName, reader,
+				z.File[i].UncompressedSize64, visitor)
+			reader.Close()
 		}
 	}
 }

@@ -14,74 +14,89 @@ package dexread
 //
 
 import (
-	"archive/zip"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/thanm/go-read-a-dex/dexapkvisit"
 )
 
-type DexState struct {
-	apk        string
-	dexname    string
+type dexState struct {
+	apk        *string
+	dexName    string
 	b          bytes.Buffer
 	rdr        *bytes.Reader
-	methodids  []DexMethodIdItem
-	typeids    []uint32
+	methodIds  []DexMethodIdItem
+	typeIds    []uint32
 	strings    []string
-	fileheader DexFileHeader
+	fileHeader DexFileHeader
 	visitor    dexapkvisit.DexApkVisitor
 }
 
-//
-// Questions:
-// - would it make sense to use io.SectionReader here?
-// - should 'zf' be taking on some more abstract type,
-//   so that this code can be unit-tested against plain DEX
-//   files and not just APK files?
-//
-
-func ReadDEX(apk string, dexname string, zf *zip.File, visitor dexapkvisit.DexApkVisitor) {
-	state := DexState{apk: apk, dexname: dexname, visitor: visitor}
-
-	// Open the DEX
-	r, err := zf.Open()
-	if err != nil {
-		log.Fatalf("opening apk %s dex %s: %v", apk, dexname, err)
+func issueError(state *dexState, fmtstring string, a ...interface{}) {
+	gripe := fmt.Sprintf(fmtstring, a...)
+	apkPre := ""
+	if state.apk != nil {
+		apkPre = fmt.Sprintf("apk %s ", state.apk)
 	}
-	defer r.Close()
+	msg := fmt.Sprintf("reading %sdex %s: %s", apkPre, state.dexName, gripe)
+	log.Fatalf(msg)
+}
+
+// Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
+func ReadDEXFile(dexFilePath string, visitor dexapkvisit.DexApkVisitor) {
+	fi, err := os.Stat(dexFilePath)
+	if err != nil {
+		log.Fatalf("unable to access dex file %s", dexFilePath)
+	}
+	dfile, err := os.Open(dexFilePath)
+	if err != nil {
+		log.Fatalf("unable to open dex file %s", dexFilePath)
+	}
+	defer dfile.Close()
+	ReadDEX(nil, dexFilePath, dfile, uint64(fi.Size()), visitor)
+}
+
+// Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
+func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64, visitor dexapkvisit.DexApkVisitor) {
+	state := dexState{apk: apk, dexName: dexName, visitor: visitor}
+
+	// NB: the following seems clunky/inelegant (reading in entire contents
+	// of DEX and then creating a new bytes.Reader to muck around within it).
+	// Is there a more elegant way to do this? Maybe io.SectionReader?
 
 	// Read in the whole enchilada
-	nread, err := io.Copy(&state.b, r)
+	nread, err := io.Copy(&state.b, reader)
 	if err != nil {
-		log.Fatalf("reading apk %s dex %s: %v", apk, dexname, err)
+		issueError(&state, "%v", err)
 	}
-	if uint64(nread) != zf.UncompressedSize64 {
-		log.Fatalf("reading apk %s dex %s: expected %d bytes read %d", apk, dexname, zf.UncompressedSize64, nread)
+	if uint64(nread) != expectedSize {
+		issueError(&state, "expected %d bytes read %d", expectedSize, nread)
 	}
 	state.rdr = bytes.NewReader(state.b.Bytes())
 
 	// Unpack file header and verify magic string
-	state.fileheader = unpackDexFileHeader(&state)
+	state.fileHeader = unpackDexFileHeader(&state)
 
 	// Invoke visitor callback
-	visitor.VisitDEX(dexname, state.fileheader.Sha1Sig)
+	visitor.VisitDEX(dexName, state.fileHeader.Sha1Sig)
 
 	// Read method ids
-	state.methodids = unpackMethodIds(&state)
+	state.methodIds = unpackMethodIds(&state)
 
 	// Read type ids
-	state.typeids = unpackTypeIds(&state)
+	state.typeIds = unpackTypeIds(&state)
 
 	// Read strings
 	state.strings = unpackStringIds(&state)
 
 	// Dive into each class
-	numClasses := state.fileheader.ClassDefsSize
-	off := state.fileheader.ClassDefsOff
+	numClasses := state.fileHeader.ClassDefsSize
+	off := state.fileHeader.ClassDefsOff
 	for cl := uint32(0); cl < numClasses; cl++ {
 		classHeader := unpackDexClass(&state, off)
 		visitor.Verbose(1, "class %d type idx is %d", cl, classHeader.ClassIdx)
@@ -90,7 +105,7 @@ func ReadDEX(apk string, dexname string, zf *zip.File, visitor dexapkvisit.DexAp
 	}
 }
 
-func unpackDexFileHeader(state *DexState) DexFileHeader {
+func unpackDexFileHeader(state *dexState) DexFileHeader {
 	var retval DexFileHeader
 
 	// NB: do I really need a loop here? it would be nice to
@@ -100,16 +115,14 @@ func unpackDexFileHeader(state *DexState) DexFileHeader {
 	DexFileMagic := [8]byte{0x64, 0x65, 0x78, 0x0a, 0x30, 0x33, 0x35, 0x00}
 	for i := 0; i < 8; i++ {
 		if DexFileMagic[i] != headerBytes[i] {
-			log.Fatalf("reading apk %s dex %s: not a DEX file",
-				state.apk, state.dexname)
+			issueError(state, "not a DEX file")
 		}
 	}
 
 	// Populate the header file struct
 	err := binary.Read(state.rdr, binary.LittleEndian, &retval)
 	if err != nil {
-		log.Fatalf("reading apk %s dex %s: unable "+
-			"to decode DEX header", state.apk, state.dexname)
+		issueError(state, "unable to decode DEX header")
 	}
 
 	return retval
@@ -118,22 +131,20 @@ func unpackDexFileHeader(state *DexState) DexFileHeader {
 // Can't use io.SeekStart with gccgo (libgo not up to date)
 const ioSeekStart = 0
 
-func seekReader(state *DexState, off uint32) {
+func seekReader(state *dexState, off uint32) {
 	_, err := state.rdr.Seek(int64(off), ioSeekStart)
 	if err != nil {
-		log.Fatalf("reading apk %s dex %s: unable "+
-			"to seek to offset %d", state.apk, state.dexname, off)
+		issueError(state, "unable to seek to offset %d", off)
 	}
 }
 
-func unpackDexClass(state *DexState, off uint32) DexClassHeader {
+func unpackDexClass(state *dexState, off uint32) DexClassHeader {
 	var retval DexClassHeader
 
 	seekReader(state, off)
 	err := binary.Read(state.rdr, binary.LittleEndian, &retval)
 	if err != nil {
-		log.Fatalf("reading apk %s dex %s: unable "+
-			"to decode class header", state.apk, state.dexname)
+		issueError(state, "unable to decode class header")
 	}
 
 	return retval
@@ -205,13 +216,13 @@ func decodeDescriptor(d string) string {
 	return base
 }
 
-func getClassName(state *DexState, ci *DexClassHeader) string {
-	typeidx := state.typeids[ci.ClassIdx]
+func getClassName(state *dexState, ci *DexClassHeader) string {
+	typeidx := state.typeIds[ci.ClassIdx]
 	typename := state.strings[typeidx]
 	return decodeDescriptor(typename)
 }
 
-func examineClass(state *DexState, ci *DexClassHeader) {
+func examineClass(state *dexState, ci *DexClassHeader) {
 
 	// No class data? In theory this can happen
 	if ci.ClassDataOff == 0 {
@@ -271,19 +282,18 @@ func examineClass(state *DexState, ci *DexClassHeader) {
 	}
 }
 
-func unpackStringIds(state *DexState) []string {
-	nStringIds := int(state.fileheader.StringIdsSize)
+func unpackStringIds(state *dexState) []string {
+	nStringIds := int(state.fileHeader.StringIdsSize)
 	stringOffsets := make([]uint32, nStringIds, nStringIds)
 
 	// position the reader at the right spot
-	seekReader(state, state.fileheader.StringIdsOff)
+	seekReader(state, state.fileHeader.StringIdsOff)
 
 	// read offsets
 	for i := 0; i < nStringIds; i++ {
 		err := binary.Read(state.rdr, binary.LittleEndian, &stringOffsets[i])
 		if err != nil {
-			log.Fatalf("reading apk %s dex %s: string ID %d "+
-				"unpack failed", state.apk, state.dexname, i)
+			issueError(state, "string ID %d unpack failed", i)
 		}
 	}
 
@@ -308,7 +318,7 @@ func zLen(sd []byte) int {
 // DEX file strings use a somewhat peculiar "Modified" UTF-8 encoding, details
 // in https://source.android.com/devices/tech/dalvik/dex-format.html#mutf-8
 //
-func unpackModUTFString(state *DexState, off uint32) string {
+func unpackModUTFString(state *dexState, off uint32) string {
 	content := state.b.Bytes()
 	sdata := content[off:]
 	helper := ulebHelper{sdata}
@@ -318,19 +328,18 @@ func unpackModUTFString(state *DexState, off uint32) string {
 	return string(helper.data[:sl])
 }
 
-func unpackMethodIds(state *DexState) []DexMethodIdItem {
-	nMethods := int(state.fileheader.MethodIdsSize)
+func unpackMethodIds(state *dexState) []DexMethodIdItem {
+	nMethods := int(state.fileHeader.MethodIdsSize)
 	ret := make([]DexMethodIdItem, nMethods, nMethods)
 
 	// position the reader at the right spot
-	seekReader(state, state.fileheader.MethodIdsOff)
+	seekReader(state, state.fileHeader.MethodIdsOff)
 
 	// read in the array of method id items
 	for i := 0; i < nMethods; i++ {
 		err := binary.Read(state.rdr, binary.LittleEndian, &ret[i])
 		if err != nil {
-			log.Fatalf("reading apk %s dex %s: method ID %d "+
-				"unpack failed", state.apk, state.dexname, i)
+			issueError(state, "method ID %d unpack failed", i)
 		}
 	}
 
@@ -343,19 +352,18 @@ func unpackMethodIds(state *DexState) []DexMethodIdItem {
 // what would be a good way to common them up? Generics would
 // be useful here.
 
-func unpackTypeIds(state *DexState) []uint32 {
-	nTypeIds := int(state.fileheader.TypeIdsSize)
+func unpackTypeIds(state *dexState) []uint32 {
+	nTypeIds := int(state.fileHeader.TypeIdsSize)
 	ret := make([]uint32, nTypeIds, nTypeIds)
 
 	// position the reader at the right spot
-	seekReader(state, state.fileheader.TypeIdsOff)
+	seekReader(state, state.fileHeader.TypeIdsOff)
 
 	// read in the array of type id items
 	for i := 0; i < nTypeIds; i++ {
 		err := binary.Read(state.rdr, binary.LittleEndian, &ret[i])
 		if err != nil {
-			log.Fatalf("reading apk %s dex %s: type ID %d "+
-				"unpack failed", state.apk, state.dexname, i)
+			issueError(state, "type ID %d unpack failed", i)
 		}
 	}
 
@@ -364,10 +372,10 @@ func unpackTypeIds(state *DexState) []uint32 {
 	return ret
 }
 
-func examineMethod(state *DexState, methodIdx, methodCodeOffset uint64) {
+func examineMethod(state *dexState, methodIdx, methodCodeOffset uint64) {
 
 	// Look up method name from method ID
-	nameIdx := state.methodids[methodIdx].NameIdx
+	nameIdx := state.methodIds[methodIdx].NameIdx
 
 	name := state.strings[nameIdx]
 
