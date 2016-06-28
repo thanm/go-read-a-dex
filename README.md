@@ -4,7 +4,7 @@ Toy application written in Go to read/examine Android DEX/APK files. Currently o
 
 Example usage:
 
-
+```
   % cd $GOPATH
   % go get github.com/thanm/go-read-a-dex/apkreader
   % $GOPATH/bin/apkreader  -dump small.apk
@@ -18,3 +18,4 @@ Example usage:
      method id 4 name 'rcnm2' code offset 1040
      method id 5 name 'rfibonacci' code offset 1072
   %
+```
