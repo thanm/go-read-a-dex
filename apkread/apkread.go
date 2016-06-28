@@ -9,7 +9,8 @@ package apkread
 
 import (
 	"archive/zip"
-	"log"
+	"errors"
+	"fmt"
 	"regexp"
 
 	. "github.com/thanm/go-read-a-dex/dexapkvisit"
@@ -20,10 +21,10 @@ import (
 // of any DEX files it contains, making callbacks at various
 // points through a user-supplied visitor object 'visitor'. See
 // DexApkVisitor for more info on which DEX/APK parts are visited.
-func ReadAPK(apk string, visitor DexApkVisitor) {
+func ReadAPK(apk string, visitor DexApkVisitor) error {
 	rc, err := zip.OpenReader(apk)
 	if err != nil {
-		log.Fatalf("unable to open APK %s (err=%v)", apk, err)
+		return errors.New(fmt.Sprintf("unable to open APK %s: %v", apk, err))
 	}
 	defer rc.Close()
 	z := &rc.Reader
@@ -38,11 +39,12 @@ func ReadAPK(apk string, visitor DexApkVisitor) {
 			visitor.Verbose(1, "dex file %s at entry %d", entryName, i)
 			reader, err := z.File[i].Open()
 			if err != nil {
-				log.Fatalf("opening apk %s dex %s: %v", apk, entryName, err)
+				return errors.New(fmt.Sprintf("opening apk %s dex %s: %v", apk, entryName, err))
 			}
 			dexread.ReadDEX(&apk, entryName, reader,
 				z.File[i].UncompressedSize64, visitor)
 			reader.Close()
 		}
 	}
+	return nil
 }
