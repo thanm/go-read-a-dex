@@ -41,7 +41,12 @@ func TestDecodeDescriptor(t *testing.T) {
 
 func TestSmallDexFileRead(t *testing.T) {
 	visitor := &dexapktest.CaptureDexApkVisitOperations{}
-	ReadDEXFile("testdata/classes.dex", visitor)
+	err := ReadDEXFile("testdata/classes.dex", visitor)
+	if err != nil {
+		t.Errorf("TestSmallApkRead: readDexFile error %v", err)
+		return
+	}
+
 	actual := strings.Join(visitor.Result, "\n")
 
 	expected := ` DEX testdata/classes.dex

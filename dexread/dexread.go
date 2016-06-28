@@ -16,9 +16,9 @@ package dexread
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 
@@ -37,32 +37,34 @@ type dexState struct {
 	visitor    dexapkvisit.DexApkVisitor
 }
 
-func issueError(state *dexState, fmtstring string, a ...interface{}) {
+func mkError(state *dexState, fmtstring string, a ...interface{}) error {
 	gripe := fmt.Sprintf(fmtstring, a...)
 	apkPre := ""
 	if state.apk != nil {
 		apkPre = fmt.Sprintf("apk %s ", state.apk)
 	}
 	msg := fmt.Sprintf("reading %sdex %s: %s", apkPre, state.dexName, gripe)
-	log.Fatalf(msg)
+	return errors.New(msg)
 }
 
 // Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
-func ReadDEXFile(dexFilePath string, visitor dexapkvisit.DexApkVisitor) {
+func ReadDEXFile(dexFilePath string, visitor dexapkvisit.DexApkVisitor) error {
+	state := dexState{dexName: dexFilePath, visitor: visitor}
 	fi, err := os.Stat(dexFilePath)
 	if err != nil {
-		log.Fatalf("unable to access dex file %s", dexFilePath)
+		return mkError(&state, "os.Stat failed(): %v", err)
 	}
 	dfile, err := os.Open(dexFilePath)
 	if err != nil {
-		log.Fatalf("unable to open dex file %s", dexFilePath)
+		return mkError(&state, "os.Open() failed(): %v", err)
 	}
 	defer dfile.Close()
 	ReadDEX(nil, dexFilePath, dfile, uint64(fi.Size()), visitor)
+	return err
 }
 
 // Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
-func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64, visitor dexapkvisit.DexApkVisitor) {
+func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64, visitor dexapkvisit.DexApkVisitor) error {
 	state := dexState{apk: apk, dexName: dexName, visitor: visitor}
 
 	// NB: the following seems clunky/inelegant (reading in entire contents
@@ -72,41 +74,56 @@ func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64,
 	// Read in the whole enchilada
 	nread, err := io.Copy(&state.b, reader)
 	if err != nil {
-		issueError(&state, "%v", err)
+		return mkError(&state, "reading dex data: %v", err)
 	}
 	if uint64(nread) != expectedSize {
-		issueError(&state, "expected %d bytes read %d", expectedSize, nread)
+		return mkError(&state, "expected %d bytes read %d", expectedSize, nread)
 	}
 	state.rdr = bytes.NewReader(state.b.Bytes())
 
 	// Unpack file header and verify magic string
-	state.fileHeader = unpackDexFileHeader(&state)
+	state.fileHeader, err = unpackDexFileHeader(&state)
+	if err != nil {
+		return err
+	}
 
 	// Invoke visitor callback
 	visitor.VisitDEX(dexName, state.fileHeader.Sha1Sig)
 
 	// Read method ids
-	state.methodIds = unpackMethodIds(&state)
+	state.methodIds, err = unpackMethodIds(&state)
+	if err != nil {
+		return err
+	}
 
 	// Read type ids
-	state.typeIds = unpackTypeIds(&state)
+	state.typeIds, err = unpackTypeIds(&state)
+	if err != nil {
+		return err
+	}
 
 	// Read strings
-	state.strings = unpackStringIds(&state)
+	state.strings, err = unpackStringIds(&state)
+	if err != nil {
+		return err
+	}
 
 	// Dive into each class
 	numClasses := state.fileHeader.ClassDefsSize
 	off := state.fileHeader.ClassDefsOff
 	for cl := uint32(0); cl < numClasses; cl++ {
-		classHeader := unpackDexClass(&state, off)
+		classHeader, err := unpackDexClass(&state, off)
+		if err != nil {
+			return err
+		}
 		visitor.Verbose(1, "class %d type idx is %d", cl, classHeader.ClassIdx)
 		examineClass(&state, &classHeader)
 		off += DexClassHeaderSize
 	}
+	return err
 }
 
-func unpackDexFileHeader(state *dexState) DexFileHeader {
-	var retval DexFileHeader
+func unpackDexFileHeader(state *dexState) (retval DexFileHeader, err error) {
 
 	// NB: do I really need a loop here? it would be nice to
 	// compare slices using a single operation -- wondering if
@@ -115,39 +132,40 @@ func unpackDexFileHeader(state *dexState) DexFileHeader {
 	DexFileMagic := [8]byte{0x64, 0x65, 0x78, 0x0a, 0x30, 0x33, 0x35, 0x00}
 	for i := 0; i < 8; i++ {
 		if DexFileMagic[i] != headerBytes[i] {
-			issueError(state, "not a DEX file")
+			return retval, mkError(state, "not a DEX file")
 		}
 	}
 
 	// Populate the header file struct
-	err := binary.Read(state.rdr, binary.LittleEndian, &retval)
+	err = binary.Read(state.rdr, binary.LittleEndian, &retval)
 	if err != nil {
-		issueError(state, "unable to decode DEX header")
+		return retval, mkError(state, "unable to decode DEX header: %v", err)
 	}
 
-	return retval
+	return
 }
 
-// Can't use io.SeekStart with gccgo (libgo not up to date)
+// Can't use io.SeekStart with gccgo (gccgo libgo version doesn't include it)
 const ioSeekStart = 0
 
-func seekReader(state *dexState, off uint32) {
+func seekReader(state *dexState, off uint32) error {
 	_, err := state.rdr.Seek(int64(off), ioSeekStart)
 	if err != nil {
-		issueError(state, "unable to seek to offset %d", off)
+		return mkError(state, "unable to seek to offset %d: %v", off, err)
 	}
+	return nil
 }
 
-func unpackDexClass(state *dexState, off uint32) DexClassHeader {
-	var retval DexClassHeader
-
-	seekReader(state, off)
-	err := binary.Read(state.rdr, binary.LittleEndian, &retval)
+func unpackDexClass(state *dexState, off uint32) (retval DexClassHeader, err error) {
+	err = seekReader(state, off)
 	if err != nil {
-		issueError(state, "unable to decode class header")
+		return
 	}
-
-	return retval
+	err = binary.Read(state.rdr, binary.LittleEndian, &retval)
+	if err != nil {
+		return retval, mkError(state, "unable to unpack class header: %v", err)
+	}
+	return
 }
 
 type ulebHelper struct {
@@ -244,6 +262,7 @@ func examineClass(state *dexState, ci *DexClassHeader) {
 	numMethods := clh.numDirectMethods + clh.numVirtualMethods
 
 	// invoke visitor callback
+	fmt.Printf("ci is %v\n", *ci)
 	state.visitor.VisitClass(getClassName(state, ci), numMethods)
 
 	state.visitor.Verbose(1, "num static fields is %d", clh.numStaticFields)
@@ -251,10 +270,9 @@ func examineClass(state *dexState, ci *DexClassHeader) {
 	state.visitor.Verbose(1, "num direct methods is %d", clh.numDirectMethods)
 	state.visitor.Verbose(1, "num virtual methods is %d", clh.numVirtualMethods)
 
-	// Not interested in field info, but we have to get by
-	// that information to get to the interesting stuff
-	// that follows (since it's ULEB, we can't skip over it
-	// directly)
+	// Not interested in field info, but we have to get by that
+	// information to get to the interesting stuff that follows (since
+	// it's ULEB, we can't skip over it directly)
 	numFields := clh.numStaticFields + clh.numInstanceFields
 	for i := uint32(0); i < numFields; i++ {
 		helper.grabULEB128() // field_idx
@@ -282,27 +300,30 @@ func examineClass(state *dexState, ci *DexClassHeader) {
 	}
 }
 
-func unpackStringIds(state *dexState) []string {
+func unpackStringIds(state *dexState) (retval []string, err error) {
 	nStringIds := int(state.fileHeader.StringIdsSize)
 	stringOffsets := make([]uint32, nStringIds, nStringIds)
 
 	// position the reader at the right spot
-	seekReader(state, state.fileHeader.StringIdsOff)
+	err = seekReader(state, state.fileHeader.StringIdsOff)
+	if err != nil {
+		return
+	}
 
 	// read offsets
 	for i := 0; i < nStringIds; i++ {
 		err := binary.Read(state.rdr, binary.LittleEndian, &stringOffsets[i])
 		if err != nil {
-			issueError(state, "string ID %d unpack failed", i)
+			return []string{}, mkError(state, "string ID %d unpack failed: %v", i, err)
 		}
 	}
 
 	// now read in string data
-	ret := make([]string, nStringIds, nStringIds)
+	retval = make([]string, nStringIds, nStringIds)
 	for i := 0; i < nStringIds; i++ {
-		ret[i] = unpackModUTFString(state, stringOffsets[i])
+		retval[i] = unpackModUTFString(state, stringOffsets[i])
 	}
-	return ret
+	return retval, err
 }
 
 func zLen(sd []byte) int {
@@ -328,48 +349,54 @@ func unpackModUTFString(state *dexState, off uint32) string {
 	return string(helper.data[:sl])
 }
 
-func unpackMethodIds(state *dexState) []DexMethodIdItem {
-	nMethods := int(state.fileHeader.MethodIdsSize)
-	ret := make([]DexMethodIdItem, nMethods, nMethods)
+func unpackMethodIds(state *dexState) (retval []DexMethodIdItem, err error) {
 
 	// position the reader at the right spot
-	seekReader(state, state.fileHeader.MethodIdsOff)
+	err = seekReader(state, state.fileHeader.MethodIdsOff)
+	if err != nil {
+		return retval, err
+	}
 
 	// read in the array of method id items
+	nMethods := int(state.fileHeader.MethodIdsSize)
+	retval = make([]DexMethodIdItem, nMethods, nMethods)
 	for i := 0; i < nMethods; i++ {
-		err := binary.Read(state.rdr, binary.LittleEndian, &ret[i])
+		err = binary.Read(state.rdr, binary.LittleEndian, &retval[i])
 		if err != nil {
-			issueError(state, "method ID %d unpack failed", i)
+			return retval, mkError(state, "method ID %d unpack failed: %v", i, err)
 		}
 	}
 
 	state.visitor.Verbose(1, "read %d methodids", nMethods)
 
-	return ret
+	return retval, err
 }
 
-// NB: this function has a lot in common with the one above it--
-// what would be a good way to common them up? Generics would
-// be useful here.
+// NB: this function has a lot in common with the one above it-- what
+// would be a good way to common them up? Generics or something like
+// them would be useful here(?).
 
-func unpackTypeIds(state *dexState) []uint32 {
-	nTypeIds := int(state.fileHeader.TypeIdsSize)
-	ret := make([]uint32, nTypeIds, nTypeIds)
+func unpackTypeIds(state *dexState) (retval []uint32, err error) {
 
 	// position the reader at the right spot
-	seekReader(state, state.fileHeader.TypeIdsOff)
+	err = seekReader(state, state.fileHeader.TypeIdsOff)
+	if err != nil {
+		return retval, err
+	}
 
 	// read in the array of type id items
+	nTypeIds := int(state.fileHeader.TypeIdsSize)
+	ret := make([]uint32, nTypeIds, nTypeIds)
 	for i := 0; i < nTypeIds; i++ {
 		err := binary.Read(state.rdr, binary.LittleEndian, &ret[i])
 		if err != nil {
-			issueError(state, "type ID %d unpack failed", i)
+			return retval, mkError(state, "type ID %d unpack failed: %v", i, err)
 		}
 	}
 
 	state.visitor.Verbose(1, "read %d typeids", nTypeIds)
 
-	return ret
+	return retval, err
 }
 
 func examineMethod(state *dexState, methodIdx, methodCodeOffset uint64) {
