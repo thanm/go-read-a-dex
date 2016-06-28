@@ -1,6 +1,7 @@
 package apkread
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,7 +25,35 @@ func TestSmallApkRead(t *testing.T) {
 		    method id 5 name 'rfibonacci' code offset 1072`
 
 	if dexapktest.SqueezeWhite(actual) != dexapktest.SqueezeWhite(expected) {
-		t.Errorf("TestSmallApkRead: got '%s' expected '%s'",
+		t.Errorf("got '%s' expected '%s'",
 			visitor.Result, expected)
+	}
+}
+
+func TestNonexistentApkRead(t *testing.T) {
+	visitor := &dexapktest.CaptureDexApkVisitOperations{}
+	err := ReadAPK("X", visitor)
+	if err == nil {
+		t.Errorf("TestNonexistentApkRead: expected error")
+		return
+	}
+	actual := fmt.Sprintf("%v", err)
+	expected := "unable to open APK X: open X: no such file or directory"
+	if actual != expected {
+		t.Errorf("expected '%s' got '%s', f error", expected, actual)
+	}
+}
+
+func TestBadApkFileRead(t *testing.T) {
+	visitor := &dexapktest.CaptureDexApkVisitOperations{}
+	err := ReadAPK("apkread.go", visitor)
+	if err == nil {
+		t.Errorf("expected error")
+		return
+	}
+	actual := fmt.Sprintf("%v", err)
+	expected := "unable to open APK apkread.go: zip: not a valid zip file"
+	if actual != expected {
+		t.Errorf("expected '%s' got '%s', f error", expected, actual)
 	}
 }
