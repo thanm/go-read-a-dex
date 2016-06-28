@@ -37,6 +37,9 @@ func usage(msg string) {
 	os.Exit(2)
 }
 
+//
+// apkreader main function. Nothing to see here.
+//
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("apkreader: ")

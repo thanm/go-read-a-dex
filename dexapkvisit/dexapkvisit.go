@@ -1,5 +1,3 @@
-package dexapkvisit
-
 //
 // Interface for visiting interesting elements within and Android DEX
 // file. This focuses narrowly on methods; there are many of the
@@ -15,6 +13,8 @@ package dexapkvisit
 //          VisitDEX("classes2.dex")
 //           ...
 //
+package dexapkvisit
+
 type DexApkVisitor interface {
 	VisitAPK(apk string)
 	VisitDEX(dexname string, sha1signature [20]byte)
