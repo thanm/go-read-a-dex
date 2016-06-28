@@ -2,17 +2,17 @@ package dexread
 
 const (
 	// https://source.android.com/devices/tech/dalvik/dex-format.html#endian-constant
-	EndianConstant     = 0x12345678
-	ReverseEndianConst = 0x78563412
-	DexFileHeaderSize  = 112
-	DexClassHeaderSize = 32
+	endianConstant     = 0x12345678
+	reverseEndianConst = 0x78563412
+	dexFileHeaderSize  = 112
+	dexClassHeaderSize = 32
 )
 
 //
 // Upper case fields are intentional (to allow filling in the contents
 // of this struct via reflection).
 //
-type DexFileHeader struct {
+type dexFileHeader struct {
 	// https://source.android.com/devices/tech/dalvik/dex-format.html#header-item
 	Magic         [8]byte
 	Checksum      uint32
@@ -39,7 +39,7 @@ type DexFileHeader struct {
 	DataOff       uint32
 }
 
-type DexClassHeader struct {
+type dexClassHeader struct {
 	// https://source.android.com/devices/tech/dalvik/dex-format.html#class-def-item
 	ClassIdx        uint32
 	AccessFlags     uint32
@@ -51,7 +51,7 @@ type DexClassHeader struct {
 	StaticValuesOff uint32
 }
 
-type DexMethodIdItem struct {
+type dexMethodIdItem struct {
 	ClassIdx uint16
 	TypeIdx  uint16
 	NameIdx  uint32
@@ -61,7 +61,7 @@ type DexMethodIdItem struct {
 // Note that within the DEX file, these fields are ULEB128 encoded; the
 // struct below is to hold the decoded values.
 //
-type DexClassContents struct {
+type dexClassContents struct {
 	// https://source.android.com/devices/tech/dalvik/dex-format.html#class-data-item
 	numStaticFields   uint32
 	numInstanceFields uint32

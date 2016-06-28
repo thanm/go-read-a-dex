@@ -1,5 +1,7 @@
 //
-// Unit testing helpers for apkread / dexread
+// This package contains helper functions that are common to the
+// unit tests for the dexread and apkread packages: a visitor class
+// for capturing callbacks, and a whitespace squeeze helper routine.
 //
 package dexapktest
 

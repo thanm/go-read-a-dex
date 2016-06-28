@@ -1,5 +1,3 @@
-package dexread
-
 //
 // Rudimentary package for examining DEX files. See:
 //
@@ -12,6 +10,7 @@ package dexread
 // the visitor for each DEX class and DEX method in the DEX file
 // of interest.
 //
+package dexread
 
 import (
 	"bytes"
@@ -30,10 +29,10 @@ type dexState struct {
 	dexName    string
 	b          bytes.Buffer
 	rdr        *bytes.Reader
-	methodIds  []DexMethodIdItem
+	methodIds  []dexMethodIdItem
 	typeIds    []uint32
 	strings    []string
-	fileHeader DexFileHeader
+	fileHeader dexFileHeader
 	visitor    dexapkvisit.DexApkVisitor
 }
 
@@ -117,12 +116,12 @@ func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64,
 		}
 		visitor.Verbose(1, "class %d type idx is %d", cl, classHeader.ClassIdx)
 		examineClass(&state, &classHeader)
-		off += DexClassHeaderSize
+		off += dexClassHeaderSize
 	}
 	return err
 }
 
-func unpackDexFileHeader(state *dexState) (retval DexFileHeader, err error) {
+func unpackDexFileHeader(state *dexState) (retval dexFileHeader, err error) {
 
 	// NB: do I really need a loop here? it would be nice to
 	// compare slices using a single operation -- wondering if
@@ -155,7 +154,7 @@ func seekReader(state *dexState, off uint32) error {
 	return nil
 }
 
-func unpackDexClass(state *dexState, off uint32) (retval DexClassHeader, err error) {
+func unpackDexClass(state *dexState, off uint32) (retval dexClassHeader, err error) {
 	err = seekReader(state, off)
 	if err != nil {
 		return
@@ -233,13 +232,13 @@ func decodeDescriptor(d string) string {
 	return base
 }
 
-func getClassName(state *dexState, ci *DexClassHeader) string {
+func getClassName(state *dexState, ci *dexClassHeader) string {
 	typeidx := state.typeIds[ci.ClassIdx]
 	typename := state.strings[typeidx]
 	return decodeDescriptor(typename)
 }
 
-func examineClass(state *dexState, ci *DexClassHeader) {
+func examineClass(state *dexState, ci *dexClassHeader) {
 
 	// No class data? In theory this can happen
 	if ci.ClassDataOff == 0 {
@@ -253,7 +252,7 @@ func examineClass(state *dexState, ci *DexClassHeader) {
 	helper := ulebHelper{cldata}
 
 	// Read four ULEB128 encoded values into struct
-	var clh DexClassContents
+	var clh dexClassContents
 	clh.numStaticFields = uint32(helper.grabULEB128())
 	clh.numInstanceFields = uint32(helper.grabULEB128())
 	clh.numDirectMethods = uint32(helper.grabULEB128())
@@ -347,7 +346,7 @@ func unpackModUTFString(state *dexState, off uint32) string {
 	return string(helper.data[:sl])
 }
 
-func unpackMethodIds(state *dexState) (retval []DexMethodIdItem, err error) {
+func unpackMethodIds(state *dexState) (retval []dexMethodIdItem, err error) {
 
 	// position the reader at the right spot
 	err = seekReader(state, state.fileHeader.MethodIdsOff)
@@ -357,7 +356,7 @@ func unpackMethodIds(state *dexState) (retval []DexMethodIdItem, err error) {
 
 	// read in the array of method id items
 	nMethods := int(state.fileHeader.MethodIdsSize)
-	retval = make([]DexMethodIdItem, nMethods, nMethods)
+	retval = make([]dexMethodIdItem, nMethods, nMethods)
 	for i := 0; i < nMethods; i++ {
 		err = binary.Read(state.rdr, binary.LittleEndian, &retval[i])
 		if err != nil {

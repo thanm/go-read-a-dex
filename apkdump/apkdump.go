@@ -1,13 +1,13 @@
+//
+// Contains DexApkDumper, an implementation of the DexApkVisitor interface
+// which dumps out info on APK/DEX contents to stdout.
+//
 package apkdump
 
 import (
 	"fmt"
 )
 
-//
-// This implementation of the DexApkVisitor interface dumps
-// out information about the APK/DEX contents to stdout
-//
 type DexApkDumper struct {
 	Vlevel int
 }
