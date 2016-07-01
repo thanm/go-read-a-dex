@@ -1,9 +1,9 @@
 //
-// Rudimentary package for examining Android APK files. An APK file
-// is basically a ZIP file that contains an Android manifest and a series
-// of DEX files, strings, resources, bitmaps, and assorted other items.
-// This specific reader looks only at the DEX files, not the other
-// bits and pieces (of which there are many).
+// Rudimentary package for examining Android APK files. An APK file is
+// basically a ZIP file that contains an Android manifest and a series
+// of DEX files, strings, resources, bitmaps, and assorted other
+// items.  This specific reader looks only at the DEX files, not the
+// other bits and pieces (of which there are many).
 //
 package apkread
 
@@ -18,9 +18,9 @@ import (
 )
 
 // ReadAPK opens the specified APK file 'apk' and walks the contents
-// of any DEX files it contains, making callbacks at various
-// points through a user-supplied visitor object 'visitor'. See
-// DexApkVisitor for more info on which DEX/APK parts are visited.
+// of any DEX files it contains, making callbacks at various points
+// through a user-supplied visitor object 'visitor'. See DexApkVisitor
+// for more info on which DEX/APK parts are visited.
 func ReadAPK(apk string, visitor DexApkVisitor) error {
 	rc, err := zip.OpenReader(apk)
 	if err != nil {

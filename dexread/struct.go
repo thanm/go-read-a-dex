@@ -8,10 +8,8 @@ const (
 	dexClassHeaderSize = 32
 )
 
-//
 // Upper case fields are intentional (to allow filling in the contents
 // of this struct via reflection).
-//
 type dexFileHeader struct {
 	// https://source.android.com/devices/tech/dalvik/dex-format.html#header-item
 	Magic         [8]byte

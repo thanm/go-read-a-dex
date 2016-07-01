@@ -10,7 +10,9 @@ import (
 	"regexp"
 )
 
-// A visitor to pass to ReadDEX/ReadAPK during unit testing. It captures any callbacks into a slice of strings, which can then be examined/verified.
+// A visitor to pass to ReadDEX/ReadAPK during unit testing. It
+// captures any callbacks into a slice of strings, which can then be
+// examined/verified.
 //
 type CaptureDexApkVisitOperations struct {
 	Result []string

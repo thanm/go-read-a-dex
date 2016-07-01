@@ -5,10 +5,10 @@
 //
 // for a specification of the DEX file format.
 //
-// This package focuses on the classes and methods in a DEX file;
-// you pass it a visitor object and it will invoke interfaces on
-// the visitor for each DEX class and DEX method in the DEX file
-// of interest.
+// This package focuses on the classes and methods in a DEX file; you
+// pass it a visitor object and it will invoke interfaces on the
+// visitor for each DEX class and DEX method in the DEX file of
+// interest.
 //
 package dexread
 
@@ -46,7 +46,8 @@ func mkError(state *dexState, fmtstring string, a ...interface{}) error {
 	return errors.New(msg)
 }
 
-// Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
+// Examine the contents of the DEX file 'dexFilePath', invoking callbacks
+// within the visitor object 'visitor.
 func ReadDEXFile(dexFilePath string, visitor dexapkvisit.DexApkVisitor) error {
 	state := dexState{dexName: dexFilePath, visitor: visitor}
 	fi, err := os.Stat(dexFilePath)
@@ -61,13 +62,18 @@ func ReadDEXFile(dexFilePath string, visitor dexapkvisit.DexApkVisitor) error {
 	return ReadDEX(nil, dexFilePath, dfile, uint64(fi.Size()), visitor)
 }
 
-// Examine the contents of the DEX file that that is pointed to by the eader 'reader'. In the case that the DEX file is embedded within an APK file, 'apk' wil;l point to the APK name (for error reporting purposes).
+// Examine the contents of the DEX file that that is pointed to by the
+// reader 'reader'. In the case that the DEX file is embedded within an
+// APK file, 'apk' will point to the APK name (for error reporting
+// purposes); if 'apk' is nil the assumption is that we're looking at
+// a stand-alone DEX file.
 func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64, visitor dexapkvisit.DexApkVisitor) error {
 	state := dexState{apk: apk, dexName: dexName, visitor: visitor}
 
-	// NB: the following seems clunky/inelegant (reading in entire contents
-	// of DEX and then creating a new bytes.Reader to muck around within it).
-	// Is there a more elegant way to do this? Maybe io.SectionReader?
+	// NB: the following seems clunky/inelegant (reading in entire
+	// contents of DEX and then creating a new bytes.Reader to muck
+	// around within it).  Is there a more elegant or efficient way to
+	// do this?  Maybe io.SectionReader?
 
 	// Read in the whole enchilada
 	nread, err := io.Copy(&state.b, reader)
@@ -276,10 +282,8 @@ func examineClass(state *dexState, ci *dexClassHeader) {
 		helper.grabULEB128() // access_flags
 	}
 
-	//
 	// Examine the methods. Note that method ID value read is a
 	// difference from the index of the previous element in the list.
-	//
 	var methodIdx uint64 = 0
 	for i := uint32(0); i < numMethods; i++ {
 		methodDelta := helper.grabULEB128()
