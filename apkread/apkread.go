@@ -41,9 +41,11 @@ func ReadAPK(apk string, visitor DexApkVisitor) error {
 			if err != nil {
 				return errors.New(fmt.Sprintf("opening apk %s dex %s: %v", apk, entryName, err))
 			}
-			dexread.ReadDEX(&apk, entryName, reader,
-				z.File[i].UncompressedSize64, visitor)
-			reader.Close()
+			func() {
+				dexread.ReadDEX(&apk, entryName, reader,
+					z.File[i].UncompressedSize64, visitor)
+				defer reader.Close()
+			}()
 		}
 	}
 	return nil
