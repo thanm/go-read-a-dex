@@ -1,8 +1,8 @@
 //
-// Interface for visiting interesting elements within and Android DEX
-// file. This focuses narrowly on methods; there are many of the
-// aspects of the DEX file that could be visited but are not. Visit
-// order is logically top-down, e.g.
+// Interfaces for visiting interesting elements within and Android DEX
+// file. These focus narrowly on methods; there are many of the
+// aspects of APK and DEX files that could be visited but are
+// not. Visit order is logically top-down, e.g.
 //
 //        VisitAPK("mumble.apk")
 //          VisitDEX("classes1.dex")
@@ -15,10 +15,16 @@
 //
 package dexapkvisit
 
-type DexApkVisitor interface {
-	VisitAPK(apk string)
+type DexVisitor interface {
 	VisitDEX(dexname string, sha1signature [20]byte)
 	VisitClass(classname string, nmethods uint32)
 	VisitMethod(methodname string, methodIdx uint64, codeOffset uint64)
+}
+type ApkVisitor interface {
+	VisitAPK(apk string)
+}
+type DexApkVisitor interface {
+	DexVisitor
+	ApkVisitor
 	Verbose(vlevel int, s string, a ...interface{})
 }
