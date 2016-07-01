@@ -76,8 +76,9 @@ func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64,
 	// do this?  Maybe io.SectionReader?
 
 	// Read in the whole enchilada
-	nread, err := io.Copy(&state.b, reader)
-	if err != nil {
+	var nread int64
+	var err error
+	if nread, err = io.Copy(&state.b, reader); err != nil {
 		return mkError(&state, "reading dex data: %v", err)
 	}
 	if uint64(nread) != expectedSize {
@@ -86,8 +87,7 @@ func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64,
 	state.rdr = bytes.NewReader(state.b.Bytes())
 
 	// Unpack file header and verify magic string
-	state.fileHeader, err = unpackDexFileHeader(&state)
-	if err != nil {
+	if state.fileHeader, err = unpackDexFileHeader(&state); err != nil {
 		return err
 	}
 
@@ -95,20 +95,17 @@ func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64,
 	visitor.VisitDEX(dexName, state.fileHeader.Sha1Sig)
 
 	// Read method ids
-	state.methodIds, err = unpackMethodIds(&state)
-	if err != nil {
+	if state.methodIds, err = unpackMethodIds(&state); err != nil {
 		return err
 	}
 
 	// Read type ids
-	state.typeIds, err = unpackTypeIds(&state)
-	if err != nil {
+	if state.typeIds, err = unpackTypeIds(&state); err != nil {
 		return err
 	}
 
 	// Read strings
-	state.strings, err = unpackStringIds(&state)
-	if err != nil {
+	if state.strings, err = unpackStringIds(&state); err != nil {
 		return err
 	}
 
@@ -116,8 +113,8 @@ func ReadDEX(apk *string, dexName string, reader io.Reader, expectedSize uint64,
 	numClasses := state.fileHeader.ClassDefsSize
 	off := state.fileHeader.ClassDefsOff
 	for cl := uint32(0); cl < numClasses; cl++ {
-		classHeader, err := unpackDexClass(&state, off)
-		if err != nil {
+		var classHeader dexClassHeader
+		if classHeader, err = unpackDexClass(&state, off); err != nil {
 			return err
 		}
 		visitor.Verbose(1, "class %d type idx is %d", cl, classHeader.ClassIdx)
@@ -141,32 +138,29 @@ func unpackDexFileHeader(state *dexState) (retval dexFileHeader, err error) {
 	}
 
 	// Populate the header file struct
-	err = binary.Read(state.rdr, binary.LittleEndian, &retval)
-	if err != nil {
+	if err = binary.Read(state.rdr, binary.LittleEndian, &retval); err != nil {
 		return retval, mkError(state, "unable to decode DEX header: %v", err)
 	}
 
 	return
 }
 
-// Can't use io.SeekStart with gccgo (gccgo libgo version doesn't include it)
+// NB: can't use io.SeekStart with gccgo (gccgo has an older version of
+// libgo that doesn't include this constant). Is this a common issue?
 const ioSeekStart = 0
 
 func seekReader(state *dexState, off uint32) error {
-	_, err := state.rdr.Seek(int64(off), ioSeekStart)
-	if err != nil {
+	if _, err := state.rdr.Seek(int64(off), ioSeekStart); err != nil {
 		return mkError(state, "unable to seek to offset %d: %v", off, err)
 	}
 	return nil
 }
 
 func unpackDexClass(state *dexState, off uint32) (retval dexClassHeader, err error) {
-	err = seekReader(state, off)
-	if err != nil {
+	if err = seekReader(state, off); err != nil {
 		return
 	}
-	err = binary.Read(state.rdr, binary.LittleEndian, &retval)
-	if err != nil {
+	if err = binary.Read(state.rdr, binary.LittleEndian, &retval); err != nil {
 		return retval, mkError(state, "unable to unpack class header: %v", err)
 	}
 	return
@@ -201,7 +195,7 @@ func decodeDescriptor(d string) string {
 
 	var base string
 	if c == 'L' {
-		// reference
+		// reference: replace "/" with "." and remove trailing ";"
 		base = strings.Replace(d[pos+1:], "/", ".", -1)
 		base = strings.Replace(base, ";", "", 1)
 	} else {
@@ -268,6 +262,7 @@ func examineClass(state *dexState, ci *dexClassHeader) {
 	// invoke visitor callback
 	state.visitor.VisitClass(getClassName(state, ci), numMethods)
 
+	// debugging
 	state.visitor.Verbose(1, "num static fields is %d", clh.numStaticFields)
 	state.visitor.Verbose(1, "num instance fields is %d", clh.numInstanceFields)
 	state.visitor.Verbose(1, "num direct methods is %d", clh.numDirectMethods)
@@ -306,8 +301,7 @@ func unpackStringIds(state *dexState) (retval []string, err error) {
 	stringOffsets := make([]uint32, nStringIds, nStringIds)
 
 	// position the reader at the right spot
-	err = seekReader(state, state.fileHeader.StringIdsOff)
-	if err != nil {
+	if err = seekReader(state, state.fileHeader.StringIdsOff); err != nil {
 		return
 	}
 
@@ -327,6 +321,10 @@ func unpackStringIds(state *dexState) (retval []string, err error) {
 	return retval, err
 }
 
+// NB: this locally scoped function was left over from a previous
+// version of the code -- when I got rid of the last call to it,
+// I forgot to remove the function itself. Will the compiler
+// remove it for me?
 func zLen(sd []byte) int {
 	for i := 0; i < len(sd); i++ {
 		if sd[i] == 0 {
@@ -353,8 +351,7 @@ func unpackModUTFString(state *dexState, off uint32) string {
 func unpackMethodIds(state *dexState) (retval []dexMethodIdItem, err error) {
 
 	// position the reader at the right spot
-	err = seekReader(state, state.fileHeader.MethodIdsOff)
-	if err != nil {
+	if err = seekReader(state, state.fileHeader.MethodIdsOff); err != nil {
 		return retval, err
 	}
 
@@ -375,7 +372,8 @@ func unpackMethodIds(state *dexState) (retval []dexMethodIdItem, err error) {
 
 // NB: this function has a lot in common with the one above it-- what
 // would be a good way to common them up? Generics or something like
-// them would be useful here(?).
+// them would be useful here(?).  Maybe I could do the same thing
+// with interfaces?
 
 func unpackTypeIds(state *dexState) (retval []uint32, err error) {
 
@@ -391,7 +389,7 @@ func unpackTypeIds(state *dexState) (retval []uint32, err error) {
 	for i := 0; i < nTypeIds; i++ {
 		err := binary.Read(state.rdr, binary.LittleEndian, &retval[i])
 		if err != nil {
-			return retval, mkError(state, "type ID %d unpack failed: %v", i, err)
+			return retval, mkError(state, "type ID %d unpack:: %v", i, err)
 		}
 	}
 
